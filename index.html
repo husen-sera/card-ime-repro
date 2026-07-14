@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Card Select IME repro (SERA-86ey1mhad)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f3f4f6;
+      color: #171717;
+      padding: 12px;
+      -webkit-text-size-adjust: 100%;
+    }
+    h1 { font-size: 16px; margin: 4px 0 2px; }
+    .sub { font-size: 12px; color: #6b7280; margin: 0 0 12px; }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      margin-bottom: 12px;
+    }
+    .opts { font-size: 13px; }
+    .opts label { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+    .opts input[type=checkbox] { width: 18px; height: 18px; }
+    .hint { font-size: 11px; color: #6b7280; margin-left: 26px; margin-top: -4px; }
+    .log {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 10px;
+      height: 190px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log .b { color: #fca5a5; }   /* bounce fired */
+    .log .g { color: #86efac; }   /* skipped (mode kept) */
+    .log .d { color: #94a3b8; }
+    button.clear {
+      font-size: 12px; margin-top: 8px; padding: 6px 12px;
+      border: 1px solid #d1d5db; background: #fff; border-radius: 6px;
+    }
+    .try { font-size: 12px; color: #374151; margin: 0 0 10px; }
+    .try b { color: #b45309; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.3.1",
+      "react-dom": "https://esm.sh/react-dom@18.3.1",
+      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+      "react-select": "https://esm.sh/react-select@5.10.2?deps=react@18.3.1,react-dom@18.3.1",
+      "htm": "https://esm.sh/htm@3.1.1"
+    }
+  }
+  </script>
+</head>
+<body>
+  <h1>Card Select — mobile IME repro</h1>
+  <p class="sub">SERA-86ey1mhad · react-select 5.10.2 · mirrors CardSelect.jsx on staging</p>
+
+  <div id="root"></div>
+
+  <script type="module">
+    import React, { useRef, useState } from "react";
+    import { createRoot } from "react-dom/client";
+    import Select from "react-select";
+    import htm from "htm";
+
+    const html = htm.bind(React.createElement);
+
+    // Dummy cards: Japanese names + numeric codes, so you can test both
+    // "type Japanese" and "type numbers continuously" flows.
+    const OPTIONS = [
+      { value: "1", label: "001 ピカチュウ", color: "#fde68a" },
+      { value: "2", label: "025 リザードン", color: "#fecaca" },
+      { value: "3", label: "004 ヒトカゲ", color: "#fed7aa" },
+      { value: "4", label: "007 ゼニガメ", color: "#bfdbfe" },
+      { value: "5", label: "010 フシギダネ", color: "#bbf7d0" },
+      { value: "6", label: "150 ミュウツー", color: "#e9d5ff" },
+      { value: "7", label: "151 ミュウ", color: "#fbcfe8" },
+      { value: "8", label: "143 カビゴン", color: "#d1d5db" },
+    ];
+
+    const isTouchDevice =
+      typeof window !== "undefined" &&
+      ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+
+    function App() {
+      const inputRef = useRef(null);
+      const imeResetRef = useRef(null);
+      const isImeBouncingRef = useRef(false);
+      const typedRef = useRef("");
+      const compositionActiveRef = useRef(false);
+
+      const [selected, setSelected] = useState([]);
+      const [logLines, setLogLines] = useState([]);
+
+      // Toggles so you can FEEL each behavior on your own phone
+      const [fixEnabled, setFixEnabled] = useState(true);   // the IME-reset focus-bounce
+      const [blurOnSelect, setBlurOnSelect] = useState(false); // react-select default is true
+
+      const log = (msg, cls = "d") =>
+        setLogLines((prev) => [...prev.slice(-80), { msg, cls }]);
+
+      const onChange = (opt) => {
+        if (opt) {
+          setSelected((prev) => [...prev, opt]);
+          log(`picked: ${opt.label}`, "d");
+        }
+
+        const composing = compositionActiveRef.current;
+        const nonAscii = /[^\x00-\x7F]/.test(typedRef.current);
+        const needsImeReset =
+          fixEnabled && isTouchDevice && (composing || nonAscii);
+
+        log(
+          `onChange · typed="${typedRef.current}" · composing=${composing} · nonAscii=${nonAscii}`,
+          "d",
+        );
+
+        typedRef.current = "";
+        compositionActiveRef.current = false;
+
+        if (needsImeReset) {
+          const imeReset = imeResetRef.current;
+          const select = inputRef.current;
+          if (imeReset && select) {
+            isImeBouncingRef.current = true;
+            imeReset.focus();
+            requestAnimationFrame(() => {
+              inputRef.current?.focus();
+              isImeBouncingRef.current = false;
+            });
+            log("→ IME-reset BOUNCE fired (keyboard may flip to JP)", "b");
+          }
+        } else {
+          log(
+            fixEnabled
+              ? "→ bounce SKIPPED (ASCII/numeric — keyboard mode kept)"
+              : "→ fix OFF (plain react-select behavior)",
+            "g",
+          );
+        }
+      };
+
+      const selectEl = html`
+        <${Select}
+          ref=${inputRef}
+          value=${null}
+          options=${OPTIONS}
+          onChange=${onChange}
+          onInputChange=${(v, meta) => {
+            if (meta.action === "input-change") typedRef.current = v;
+          }}
+          closeMenuOnSelect=${false}
+          openMenuOnFocus
+          blurInputOnSelect=${blurOnSelect}
+          onFocus=${() => {
+            if (isImeBouncingRef.current) return;
+          }}
+          onBlur=${() => {
+            if (isImeBouncingRef.current) return;
+          }}
+          placeholder="カード名 or 番号で検索"
+          noOptionsMessage=${() => "該当するカードがありません"}
+        />
+      `;
+
+      return html`
+        <div>
+          <div class="card">
+            <p class="try">
+              Try on your phone: (1) switch keyboard to Japanese, type a card
+              name, pick it — then try to keep typing. (2) Switch to
+              <b>numbers</b>, type <b>001</b>, pick it, and see if the keypad
+              <b>stays numeric</b> or flips to Japanese.
+            </p>
+
+            <div
+              class="w-full"
+              onCompositionStart=${() => (compositionActiveRef.current = true)}
+              onCompositionEnd=${() => (compositionActiveRef.current = false)}
+              style=${{ position: "relative" }}
+            >
+              ${selectEl}
+              <input
+                ref=${imeResetRef}
+                type="text"
+                inputMode="text"
+                aria-hidden="true"
+                tabIndex=${-1}
+                autoComplete="off"
+                style=${{
+                  position: "absolute",
+                  width: 1,
+                  height: 1,
+                  opacity: 0,
+                  pointerEvents: "none",
+                  left: 0,
+                  bottom: 0,
+                }}
+              />
+            </div>
+
+            <div style=${{ marginTop: "8px", fontSize: "12px", color: "#374151" }}>
+              picked: ${selected.map((s) => s.label).join(", ") || "—"}
+            </div>
+          </div>
+
+          <div class="card opts">
+            <label>
+              <input
+                type="checkbox"
+                checked=${fixEnabled}
+                onChange=${(e) => setFixEnabled(e.target.checked)}
+              />
+              IME-reset focus-bounce (the staging fix)
+            </label>
+            <div class="hint">
+              OFF = plain react-select. ON = current staging behavior.
+            </div>
+            <label>
+              <input
+                type="checkbox"
+                checked=${blurOnSelect}
+                onChange=${(e) => setBlurOnSelect(e.target.checked)}
+              />
+              blurInputOnSelect (react-select default = ON)
+            </label>
+            <div class="hint">
+              ON dismisses the keyboard after each pick (the rejected UX).
+            </div>
+            <div class="hint" style=${{ marginLeft: 0, marginTop: 8 }}>
+              touch device detected: ${String(isTouchDevice)}
+            </div>
+          </div>
+
+          <div class="card">
+            <div style=${{ fontSize: "12px", marginBottom: "6px", color: "#374151" }}>
+              Event log
+            </div>
+            <div class="log">
+${logLines.map(
+  (l) => html`<span class=${l.cls}>${l.msg}\n</span>`,
+)}
+            </div>
+            <button class="clear" onClick=${() => setLogLines([])}>clear log</button>
+          </div>
+        </div>
+      `;
+    }
+
+    createRoot(document.getElementById("root")).render(html`<${App} />`);
+  </script>
+</body>
+</html>
