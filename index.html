@@ -81,11 +81,11 @@
     // "type Japanese" and "type numbers continuously" flows.
     const OPTIONS = [
       { value: "1", label: "001 ピカチュウ", color: "#fde68a" },
-      { value: "2", label: "025 リザードン", color: "#fecaca" },
+      { value: "2", label: "025 リザードン", color: "#FF3C3C", is_target: true },
       { value: "3", label: "004 ヒトカゲ", color: "#fed7aa" },
       { value: "4", label: "007 ゼニガメ", color: "#bfdbfe" },
       { value: "5", label: "010 フシギダネ", color: "#bbf7d0" },
-      { value: "6", label: "150 ミュウツー", color: "#e9d5ff" },
+      { value: "6", label: "150 ミュウツー", color: "#A03CFF", is_target: true },
       { value: "7", label: "151 ミュウ", color: "#fbcfe8" },
       { value: "8", label: "143 カビゴン", color: "#d1d5db" },
     ];
@@ -110,6 +110,10 @@
 
       const log = (msg, cls = "d") =>
         setLogLines((prev) => [...prev.slice(-80), { msg, cls }]);
+
+      const removeAt = (i) =>
+        setSelected((prev) => prev.filter((_, idx) => idx !== i));
+      const clearAll = () => setSelected([]);
 
       const onChange = (opt) => {
         if (opt) {
@@ -152,11 +156,30 @@
         }
       };
 
+      const colourStyles = {
+        option: (base, { data }) => ({
+          ...base,
+          backgroundColor: data.color,
+          color: data.is_target ? "#FFFFFF" : "#000000",
+          fontWeight: data.is_target ? "bold" : "normal",
+          fontSize: "90%",
+        }),
+        control: (base) => ({
+          ...base,
+          border: "2px solid #212121",
+          borderTop: "1px solid #212121",
+          fontSize: "14px",
+          // Connect visually to the SelectedList above when cards are picked
+          borderRadius: selected.length > 0 ? "0 0 4px 4px" : "4px",
+        }),
+      };
+
       const selectEl = html`
         <${Select}
           ref=${inputRef}
           value=${null}
           options=${OPTIONS}
+          styles=${colourStyles}
           onChange=${onChange}
           onInputChange=${(v, meta) => {
             if (meta.action === "input-change") typedRef.current = v;
@@ -185,6 +208,103 @@
               <b>stays numeric</b> or flips to Japanese.
             </p>
 
+            ${selected.length > 0 &&
+            html`
+              <div
+                style=${{
+                  border: "2px solid #111827",
+                  borderBottom: "none",
+                  borderRadius: "4px 4px 0 0",
+                }}
+              >
+                <div
+                  style=${{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "4px 8px",
+                    background: "#d1d5db",
+                    borderBottom: "1px solid #111827",
+                    fontSize: "12px",
+                  }}
+                >
+                  <span>${selected.length} 件 選択中</span>
+                  <button
+                    onClick=${clearAll}
+                    style=${{
+                      border: "none",
+                      background: "transparent",
+                      fontSize: "16px",
+                      lineHeight: 1,
+                      cursor: "pointer",
+                    }}
+                    aria-label="clear all"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div
+                  style=${{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    padding: "4px",
+                    background: "#fff",
+                  }}
+                >
+                  ${selected.map(
+                    (card, i) => html`
+                      <div
+                        key=${i}
+                        style=${{
+                          display: "flex",
+                          alignItems: "center",
+                          margin: "4px",
+                          maxWidth: "47%",
+                          border: "1px solid #111827",
+                          borderRadius: "4px",
+                          background: card.color,
+                          color: card.is_target ? "#FFFFFF" : "#000",
+                          fontWeight: card.is_target ? "bold" : "normal",
+                        }}
+                      >
+                        <span
+                          style=${{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: "0 4px 0 8px",
+                            fontSize: "12px",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          >${card.label}</span
+                        >
+                        <button
+                          onClick=${() => removeAt(i)}
+                          style=${{
+                            border: "none",
+                            background: "transparent",
+                            padding: "2px 4px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                          aria-label="remove"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 19 19" fill="none">
+                            <circle cx="9.5" cy="9.5" r="9" fill="#fff" stroke="#2B4254" />
+                            <rect width="1.8" height="10.7" rx="1" transform="matrix(0.7234 0.6904 -0.7234 0.6904 13 5.06)" fill="#2B4254" />
+                            <rect width="1.8" height="10.7" rx="1" transform="matrix(-0.7234 0.6904 0.7234 0.6904 6 5.06)" fill="#2B4254" />
+                          </svg>
+                        </button>
+                      </div>
+                    `,
+                  )}
+                </div>
+              </div>
+            `}
+
             <div
               class="w-full"
               onCompositionStart=${() => (compositionActiveRef.current = true)}
@@ -211,9 +331,6 @@
               />
             </div>
 
-            <div style=${{ marginTop: "8px", fontSize: "12px", color: "#374151" }}>
-              picked: ${selected.map((s) => s.label).join(", ") || "—"}
-            </div>
           </div>
 
           <div class="card opts">
